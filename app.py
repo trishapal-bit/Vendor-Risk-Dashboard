@@ -98,17 +98,23 @@ if uploaded_monthly: st.session_state['monthly_data'] = pd.read_csv(uploaded_mon
 import os
 
 # Auto-load CSVs if they exist in the same folder
+# Auto-load CSVs directly from GitHub repo — no upload needed
 if 'vendor_risk' not in st.session_state:
-    if os.path.exists('vendor_risk_report.csv'):
-        st.session_state['vendor_risk'] = pd.read_csv('vendor_risk_report.csv')
+    st.session_state['vendor_risk'] = pd.read_csv('vendor_risk_report.csv')
 
 if 'on_time_rate' not in st.session_state:
-    if os.path.exists('on_time_rate.csv'):
-        st.session_state['on_time_rate'] = pd.read_csv('on_time_rate.csv')
+    st.session_state['on_time_rate'] = pd.read_csv('on_time_rate.csv')
 
 if 'monthly_data' not in st.session_state:
-    if os.path.exists('monthly_data.csv'):
-        st.session_state['monthly_data'] = pd.read_csv('monthly_data.csv')
+    st.session_state['monthly_data'] = pd.read_csv('monthly_data.csv')
+
+vendor_risk  = st.session_state.get('vendor_risk')
+on_time_rate = st.session_state.get('on_time_rate')
+monthly_data = st.session_state.get('monthly_data')
+
+# Clean Risk_Category
+if vendor_risk is not None:
+    vendor_risk['Risk_Category'] = vendor_risk['Risk_Category'].str.strip().str.title()
 
 vendor_risk  = st.session_state.get('vendor_risk')
 on_time_rate = st.session_state.get('on_time_rate')
