@@ -4,277 +4,367 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import seaborn as sns
+import os
 import warnings
 warnings.filterwarnings('ignore')
 
-st.set_page_config(page_title="Vendor Risk Dashboard", page_icon="🔍", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="VendorLens | Procurement Risk Intelligence", page_icon="🔍", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap');
-html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
-.metric-card { background: linear-gradient(135deg, #1e2130, #252a3d); border: 1px solid #2e3450; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 10px; }
-.metric-card .value { font-size: 2rem; font-weight: 700; color: #7eb8f7; }
-.metric-card .label { font-size: 0.78rem; color: #8892a4; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 4px; }
-.badge-high   { background: #3b1a1a; color: #ff6b6b; border: 1px solid #7b2d2d; padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; }
-.badge-medium { background: #2d2510; color: #ffa94d; border: 1px solid #7b5c1a; padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; }
-.badge-low    { background: #0e2b1a; color: #51cf66; border: 1px solid #1a5c30; padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; }
-.section-title { font-size: 1.1rem; font-weight: 700; color: #c9d1e0; padding: 8px 0; margin: 16px 0 12px 0; border-bottom: 2px solid #2e3450; }
-.ai-box { background: linear-gradient(135deg, #151c2c, #1a2235); border-left: 3px solid #7eb8f7; border-radius: 8px; padding: 14px 16px; margin: 8px 0; font-size: 0.88rem; color: #c9d1e0; line-height: 1.6; font-family: 'DM Mono', monospace; }
-[data-testid="stSidebar"] { background: #111827; border-right: 1px solid #1e2a3a; }
-div[data-testid="stMetricValue"] { color: #7eb8f7; }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+[data-testid="stSidebar"] { background: #0f1117 !important; border-right: 1px solid #1e2535; }
+[data-testid="stSidebar"] * { color: #c9d1e0 !important; }
+.kpi-card { background:#1a1f2e; border:1px solid #2e3450; border-radius:10px; padding:18px 20px; margin-bottom:8px; }
+.kpi-label { font-size:11px; color:#8892a4; text-transform:uppercase; letter-spacing:1.5px; margin-bottom:6px; }
+.kpi-value { font-size:26px; font-weight:700; color:#7eb8f7; }
+.kpi-sub   { font-size:12px; color:#8892a4; margin-top:4px; }
+.signal-buy  { background:#0a1f0f; border:1px solid #1a4a22; border-radius:8px; padding:14px 16px; margin-bottom:10px; }
+.signal-hold { background:#1a1a0a; border:1px solid #4a3d10; border-radius:8px; padding:14px 16px; margin-bottom:10px; }
+.signal-watch{ background:#1f0a0a; border:1px solid #4a1010; border-radius:8px; padding:14px 16px; margin-bottom:10px; }
+.signal-tag-buy  { background:#1a4a22; color:#4caf50; padding:2px 10px; border-radius:12px; font-size:11px; font-weight:700; }
+.signal-tag-hold { background:#4a3d10; color:#ffc107; padding:2px 10px; border-radius:12px; font-size:11px; font-weight:700; }
+.signal-tag-watch{ background:#4a1010; color:#f44336; padding:2px 10px; border-radius:12px; font-size:11px; font-weight:700; }
+.signal-region   { font-weight:600; font-size:15px; color:#c9d1e0; }
+.signal-desc     { font-size:12px; color:#8892a4; margin-top:4px; }
+.alert-green { background:#0a1f0f; border:1px solid #1a4a22; border-radius:8px; padding:14px 18px; margin-bottom:16px; color:#4caf50; font-size:14px; }
+.alert-red   { background:#1f0a0a; border:1px solid #4a1010; border-radius:8px; padding:14px 18px; margin-bottom:16px; color:#f44336; font-size:14px; }
+.alert-yellow{ background:#1a1500; border:1px solid #4a3d10; border-radius:8px; padding:14px 18px; margin-bottom:16px; color:#ffc107; font-size:14px; }
+.section-title { font-size:18px; font-weight:700; color:#c9d1e0; margin:20px 0 12px 0; padding-bottom:8px; border-bottom:2px solid #2e3450; }
+.badge-high   { background:#4a1010; color:#f44336; padding:2px 10px; border-radius:12px; font-size:11px; font-weight:700; }
+.badge-medium { background:#4a3d10; color:#ffc107; padding:2px 10px; border-radius:12px; font-size:11px; font-weight:700; }
+.badge-low    { background:#0a1f0f; color:#4caf50; padding:2px 10px; border-radius:12px; font-size:11px; font-weight:700; }
 </style>
 """, unsafe_allow_html=True)
 
-def dark_fig(figsize=(10, 5)):
+# ── Load Data ──────────────────────────────────────────────────────────────────
+@st.cache_data
+def load_data():
+    vr = pd.read_csv('vendor_risk_report.csv') if os.path.exists('vendor_risk.csv') else None
+    ot = pd.read_csv('on_time_rate.csv')        if os.path.exists('on_time_rate.csv')        else None
+    md = pd.read_csv('monthly_data.csv')        if os.path.exists('monthly_data.csv')         else None
+    return vr, ot, md
+
+vendor_risk_raw, on_time_rate, monthly_data = load_data()
+if vendor_risk_raw is not None:
+    vendor_risk_raw['Risk_Category'] = vendor_risk_raw['Risk_Category'].str.strip().str.title()
+
+# ── SIDEBAR ────────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("## 🔍 Vendor Risk Intelligence Dashboard")
+    st.markdown("<p style='color:#8892a4;font-size:12px;margin-top:-8px'>Procurement Risk Intelligence</p>", unsafe_allow_html=True)
+    st.markdown("---")
+    st.markdown("<p style='color:#8892a4;font-size:11px;letter-spacing:1.5px;text-transform:uppercase'>Navigation</p>", unsafe_allow_html=True)
+    pages = {
+        "📊  VENDOR DASHBOARD":  "dashboard",
+        "⚠️  RISK MONITOR":      "risk_monitor",
+        "🚚  SHIPPING ANALYSIS": "shipping",
+        "📅  SEASONALITY":       "seasonality",
+        "🤖  MODEL INSIGHTS":    "model",
+        "📋  DATA EXPLORER":     "data"
+    }
+    selected_page = st.radio("", list(pages.keys()), label_visibility="collapsed")
+    page = pages[selected_page]
+    st.markdown("---")
+    st.markdown("<p style='color:#8892a4;font-size:11px;letter-spacing:1.5px;text-transform:uppercase'>Filters</p>", unsafe_allow_html=True)
+    risk_threshold = st.slider("Risk Alert Threshold", min_value=50.0, max_value=70.0, value=62.0, step=0.5, help="Regions above this score are flagged HIGH RISK")
+    st.caption(f"Flagging score > {risk_threshold}")
+    if vendor_risk_raw is not None:
+        all_regions = sorted(vendor_risk_raw['Order Region'].unique().tolist())
+        selected_regions = st.multiselect("Filter Regions", all_regions, default=all_regions)
+    else:
+        selected_regions = []
+    selected_cats = st.multiselect("Risk Category", ["High Risk","Medium Risk","Low Risk"], default=["High Risk","Medium Risk","Low Risk"])
+    st.markdown("---")
+    st.markdown("<p style='color:#8892a4;font-size:11px;letter-spacing:1.5px;text-transform:uppercase'>Upload Data</p>", unsafe_allow_html=True)
+    uploaded = st.file_uploader("vendor_risk_report.csv", type="csv")
+    if uploaded:
+        vendor_risk_raw = pd.read_csv(uploaded)
+        vendor_risk_raw['Risk_Category'] = vendor_risk_raw['Risk_Category'].str.strip().str.title()
+        st.success("✅ Loaded!")
+    st.markdown("---")
+    st.markdown("<p style='color:#8892a4;font-size:10px'>DataCo Supply Chain · XGBoost + Groq LLM<br>Trisha Pal · PGDM RBA 2024–2026</p>", unsafe_allow_html=True)
+
+# ── Apply Filters ──────────────────────────────────────────────────────────────
+if vendor_risk_raw is not None and len(selected_regions) > 0:
+    vendor_risk = vendor_risk_raw[
+        (vendor_risk_raw['Order Region'].isin(selected_regions)) &
+        (vendor_risk_raw['Risk_Category'].isin(selected_cats))
+    ].copy()
+else:
+    vendor_risk = vendor_risk_raw
+
+def dark_fig(figsize=(10,5)):
     fig, ax = plt.subplots(figsize=figsize)
-    fig.patch.set_facecolor('#1e2130')
-    ax.set_facecolor('#1e2130')
-    ax.tick_params(colors='#8892a4')
-    ax.xaxis.label.set_color('#8892a4')
-    ax.yaxis.label.set_color('#8892a4')
-    ax.title.set_color('#c9d1e0')
-    for spine in ax.spines.values():
-        spine.set_edgecolor('#2e3450')
+    fig.patch.set_facecolor('#1a1f2e'); ax.set_facecolor('#1a1f2e')
+    ax.tick_params(colors='#8892a4'); ax.xaxis.label.set_color('#8892a4')
+    ax.yaxis.label.set_color('#8892a4'); ax.title.set_color('#c9d1e0')
+    for sp in ax.spines.values(): sp.set_edgecolor('#2e3450')
     return fig, ax
 
-with st.sidebar:
-    st.markdown("## 🔍 Vendor Risk Dashboard")
-    st.markdown("<p style='color:#8892a4;font-size:0.8rem'>DataCo Supply Chain · Capstone Project</p>", unsafe_allow_html=True)
-    st.markdown("---")
-    st.markdown("### 📂 Upload Your Data")
-    uploaded_vendor  = st.file_uploader("vendor_risk_report.csv", type="csv", key="vendor")
-    uploaded_ontime  = st.file_uploader("on_time_rate.csv (optional)", type="csv", key="ontime")
-    uploaded_monthly = st.file_uploader("monthly_data.csv (optional)", type="csv", key="monthly")
-    st.markdown("---")
-    st.markdown("### ⚡ Or Use Demo Data")
-    use_demo = st.button("Load Demo Data", use_container_width=True)
-
-def get_demo_vendor():
-    return pd.DataFrame({
-        'Order Region': ['Western Europe','Central America','Southern Europe','North America','South America','Eastern Europe','Eastern Asia','Southeast Asia','Oceania','West Africa','East Africa','South Asia','Central Asia'],
-        'Predicted_Prob': [0.721,0.698,0.689,0.654,0.642,0.601,0.587,0.543,0.489,0.421,0.389,0.356,0.312],
-        'Actual':         [0.683,0.672,0.661,0.632,0.618,0.581,0.556,0.521,0.467,0.398,0.367,0.334,0.289],
-        'Shipping_Delay_Gap': [2.31,2.18,2.05,1.87,1.74,1.62,1.48,1.31,1.12,0.93,0.82,0.71,0.58],
-        'Risk_Score': [68.4,65.9,63.7,60.1,58.3,55.2,52.7,49.3,44.8,38.9,35.6,32.4,28.1],
-        'Risk_Category': ['High Risk','High Risk','High Risk','Medium Risk','Medium Risk','Medium Risk','Medium Risk','Medium Risk','Medium Risk','Low Risk','Low Risk','Low Risk','Low Risk'],
-        'AI_Summary': [
-            "Western Europe's high predicted delay probability of 72.1% combined with an average shipping gap of 2.31 days signals systemic last-mile inefficiencies.",
-            "Central America exhibits a 69.8% model-predicted delay rate driven by infrastructure constraints and multi-modal transit dependencies.",
-            "Southern Europe's risk profile reflects seasonal demand surges and port congestion that elevate delay probability to 68.9%.",
-            "North America's medium risk classification is driven by a 65.4% delay probability, partially offset by stronger carrier reliability.",
-            "South America's 64.2% delay probability reflects cross-border customs complexity and limited carrier density in inland regions.",
-            "Eastern Europe shows moderate risk with a 60.1% predicted delay rate, influenced by variable carrier performance.",
-            "Eastern Asia's 58.7% predicted delay probability reflects high shipment density and port congestion risks during peak seasons.",
-            "Southeast Asia's moderate delay risk of 54.3% is shaped by archipelago logistics complexity and multi-leg shipping routes.",
-            "Oceania's 48.9% delay probability reflects geographic isolation and limited carrier competition driving transit variability.",
-            "West Africa demonstrates low risk with a 42.1% predicted delay rate, benefiting from streamlined regional trade agreements.",
-            "East Africa's 38.9% delay probability reflects improving logistics infrastructure and growing carrier network density.",
-            "South Asia's low-risk profile with a 35.6% delay probability is supported by strong domestic logistics networks.",
-            "Central Asia maintains the lowest risk profile with a 31.2% predicted delay probability and consistent carrier performance."
-        ]
-    })
-
-def get_demo_ontime():
-    return pd.DataFrame({'Shipping Mode': ['First Class','Same Day','Second Class','Standard Class'], 'On_Time_Percentage': [82.4, 78.1, 63.2, 41.7]})
-
-def get_demo_monthly():
-    return pd.DataFrame({
-        'Month_Name': ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
-        'Order_Month': list(range(1,13)),
-        'On_Time_Percentage': [58,61,55,63,67,52,48,71,65,59,44,69],
-        'Order Item Quantity': [12000,10500,13200,11800,14500,16000,15200,13800,12600,14200,18500,17300]
-    })
-
-if use_demo:
-    st.session_state['vendor_risk']  = get_demo_vendor()
-    st.session_state['on_time_rate'] = get_demo_ontime()
-    st.session_state['monthly_data'] = get_demo_monthly()
-
-if uploaded_vendor:  st.session_state['vendor_risk']  = pd.read_csv(uploaded_vendor)
-if uploaded_ontime:  st.session_state['on_time_rate'] = pd.read_csv(uploaded_ontime)
-if uploaded_monthly: st.session_state['monthly_data'] = pd.read_csv(uploaded_monthly)
-
-import os
-
-# Auto-load CSVs if they exist in the same folder
-# Auto-load CSVs directly from GitHub repo — no upload needed
-if 'vendor_risk' not in st.session_state:
-    st.session_state['vendor_risk'] = pd.read_csv('vendor_risk.csv')
-
-if 'on_time_rate' not in st.session_state:
-    st.session_state['on_time_rate'] = pd.read_csv('on_time_rate.csv')
-
-if 'monthly_data' not in st.session_state:
-    st.session_state['monthly_data'] = pd.read_csv('monthly_data.csv')
-
-vendor_risk  = st.session_state.get('vendor_risk')
-on_time_rate = st.session_state.get('on_time_rate')
-monthly_data = st.session_state.get('monthly_data')
-
-# Clean Risk_Category
-if vendor_risk is not None:
-    vendor_risk['Risk_Category'] = vendor_risk['Risk_Category'].str.strip().str.title()
-
-vendor_risk  = st.session_state.get('vendor_risk')
-on_time_rate = st.session_state.get('on_time_rate')
-monthly_data = st.session_state.get('monthly_data')
-
-# Clean Risk_Category
-if vendor_risk is not None:
-    vendor_risk['Risk_Category'] = vendor_risk['Risk_Category'].str.strip().str.title()
-
-on_time_rate = st.session_state.get('on_time_rate')
-monthly_data = st.session_state.get('monthly_data')
-
-if vendor_risk is None:
-    col1, col2, col3 = st.columns([1,2,1])
+# ── No Data Guard ──────────────────────────────────────────────────────────────
+if vendor_risk is None or len(vendor_risk) == 0:
+    col1,col2,col3 = st.columns([1,2,1])
     with col2:
-        st.markdown("<br><br><div style='text-align:center'><div style='font-size:4rem'>📦</div><h2 style='color:#c9d1e0'>Vendor Risk Dashboard</h2><p style='color:#8892a4'>Click Load Demo Data in the sidebar or upload your CSVs.</p></div>", unsafe_allow_html=True)
+        st.markdown("<br><br><div style='text-align:center'><div style='font-size:4rem'>📦</div><h2 style='color:#c9d1e0'>No data loaded</h2><p style='color:#8892a4'>Ensure CSVs are in the same folder as app.py or upload in sidebar.</p></div>", unsafe_allow_html=True)
     st.stop()
 
-st.markdown("# 🔍 Vendor Risk Intelligence Dashboard")
-st.markdown("<p style='color:#8892a4; margin-top:-10px'>Supply Chain Delivery Risk · AI-Generated Analysis · XGBoost Model</p>", unsafe_allow_html=True)
-st.markdown("---")
+# ══════════════════════════════════════════════════════════════════════
+# PAGE 1 — VENDOR DASHBOARD
+# ══════════════════════════════════════════════════════════════════════
+if page == "dashboard":
+    high_risk_count = (vendor_risk['Risk_Score'] > risk_threshold).sum()
+    avg_score = vendor_risk['Risk_Score'].mean()
 
-high_count   = (vendor_risk['Risk_Category'] == 'High Risk').sum()
-medium_count = (vendor_risk['Risk_Category'] == 'Medium Risk').sum()
-low_count    = (vendor_risk['Risk_Category'] == 'Low Risk').sum()
-avg_score    = vendor_risk['Risk_Score'].mean()
+    if high_risk_count >= 5:
+        st.markdown(f"<div class='alert-red'>🚨 <b>Risk Alert:</b> {high_risk_count} regions exceed threshold {risk_threshold}. Immediate review required.</div>", unsafe_allow_html=True)
+    elif high_risk_count >= 2:
+        st.markdown(f"<div class='alert-yellow'>⚠️ <b>Moderate Risk:</b> {high_risk_count} regions exceed threshold ({risk_threshold}). Enhanced monitoring advised.</div>", unsafe_allow_html=True)
+    else:
+        st.markdown(f"<div class='alert-green'>✅ <b>Network Normal:</b> {high_risk_count} region(s) above threshold. Procurement operations within acceptable parameters.</div>", unsafe_allow_html=True)
 
-k1,k2,k3,k4,k5 = st.columns(5)
-with k1: st.markdown(f"<div class='metric-card'><div class='value'>{len(vendor_risk)}</div><div class='label'>Total Regions</div></div>", unsafe_allow_html=True)
-with k2: st.markdown(f"<div class='metric-card'><div class='value' style='color:#ff6b6b'>{high_count}</div><div class='label'>High Risk</div></div>", unsafe_allow_html=True)
-with k3: st.markdown(f"<div class='metric-card'><div class='value' style='color:#ffa94d'>{medium_count}</div><div class='label'>Medium Risk</div></div>", unsafe_allow_html=True)
-with k4: st.markdown(f"<div class='metric-card'><div class='value' style='color:#51cf66'>{low_count}</div><div class='label'>Low Risk</div></div>", unsafe_allow_html=True)
-with k5: st.markdown(f"<div class='metric-card'><div class='value'>{avg_score:.1f}</div><div class='label'>Avg Risk Score</div></div>", unsafe_allow_html=True)
+    st.markdown("## 📊 Vendor Risk Intelligence Dashboard")
+    st.markdown(f"<p style='color:#8892a4;margin-top:-10px'>Showing {len(vendor_risk)} regions · Threshold: {risk_threshold} · Categories: {', '.join(selected_cats)}</p>", unsafe_allow_html=True)
 
-st.markdown("<br>", unsafe_allow_html=True)
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["🗺️ Vendor Risk Report","🚚 Shipping Mode","📅 Seasonality","📊 Model Performance","📋 Raw Data"])
+    high_n = (vendor_risk['Risk_Score'] > risk_threshold).sum()
+    avg_prob = vendor_risk['Predicted_Prob'].mean()*100
+    avg_gap  = vendor_risk['Shipping_Delay_Gap'].mean()
+    k1,k2,k3,k4,k5 = st.columns(5)
+    with k1: st.markdown(f"<div class='kpi-card'><div class='kpi-label'>Regions Analysed</div><div class='kpi-value'>{len(vendor_risk)}</div><div class='kpi-sub'>Filtered view</div></div>", unsafe_allow_html=True)
+    with k2: st.markdown(f"<div class='kpi-card'><div class='kpi-label'>High Risk Regions</div><div class='kpi-value' style='color:#f44336'>{high_n}</div><div class='kpi-sub'>Score > {risk_threshold}</div></div>", unsafe_allow_html=True)
+    with k3: st.markdown(f"<div class='kpi-card'><div class='kpi-label'>Avg Risk Score</div><div class='kpi-value'>{avg_score:.1f}</div><div class='kpi-sub'>Out of 100</div></div>", unsafe_allow_html=True)
+    with k4: st.markdown(f"<div class='kpi-card'><div class='kpi-label'>Avg Delay Probability</div><div class='kpi-value' style='color:#ffc107'>{avg_prob:.1f}%</div><div class='kpi-sub'>XGBoost predicted</div></div>", unsafe_allow_html=True)
+    with k5: st.markdown(f"<div class='kpi-card'><div class='kpi-label'>Avg Delay Gap</div><div class='kpi-value'>{avg_gap:.2f}d</div><div class='kpi-sub'>Actual vs scheduled</div></div>", unsafe_allow_html=True)
 
-with tab1:
-    col_left, col_right = st.columns([1.2, 1])
+    st.markdown("<br>", unsafe_allow_html=True)
+    col_left, col_right = st.columns([1.3, 1])
+
     with col_left:
-        st.markdown("<div class='section-title'>📊 Risk Score by Region</div>", unsafe_allow_html=True)
+        st.markdown("<div class='section-title'>📈 Risk Score by Region</div>", unsafe_allow_html=True)
         sorted_vr = vendor_risk.sort_values('Risk_Score', ascending=True)
-        fig, ax = dark_fig(figsize=(9, max(4, len(sorted_vr) * 0.5)))
-        colors = ['#ff6b6b' if c=='High Risk' else '#ffa94d' if c=='Medium Risk' else '#51cf66' for c in sorted_vr['Risk_Category']]
-        bars = ax.barh(sorted_vr['Order Region'], sorted_vr['Risk_Score'], color=colors, height=0.65)
+        fig, ax = dark_fig(figsize=(9, max(4, len(sorted_vr)*0.48)))
+        bar_colors = ['#f44336' if s > risk_threshold else '#ffc107' if s >= risk_threshold-3 else '#4caf50' for s in sorted_vr['Risk_Score']]
+        bars = ax.barh(sorted_vr['Order Region'], sorted_vr['Risk_Score'], color=bar_colors, height=0.65)
+        ax.axvline(x=risk_threshold, color='#ff6b6b', linestyle='--', linewidth=1.5)
         for bar, score in zip(bars, sorted_vr['Risk_Score']):
-            ax.text(bar.get_width()+0.5, bar.get_y()+bar.get_height()/2, f'{score:.1f}', va='center', color='#c9d1e0', fontsize=9)
-        ax.set_xlabel('Risk Score (0-100)'); ax.set_title('Vendor Risk Score by Region'); ax.set_xlim(0,110)
-        patches = [mpatches.Patch(color='#ff6b6b',label='High Risk'), mpatches.Patch(color='#ffa94d',label='Medium Risk'), mpatches.Patch(color='#51cf66',label='Low Risk')]
-        ax.legend(handles=patches, loc='lower right', facecolor='#1e2130', edgecolor='#2e3450', labelcolor='#c9d1e0')
+            ax.text(bar.get_width()+0.3, bar.get_y()+bar.get_height()/2, f'{score:.1f}', va='center', color='#c9d1e0', fontsize=8)
+        ax.set_xlabel('Risk Score (0–100)'); ax.set_title('Vendor Risk Score by Region'); ax.set_xlim(0, 75)
+        patches = [mpatches.Patch(color='#f44336',label='High Risk'), mpatches.Patch(color='#ffc107',label='Medium Risk'), mpatches.Patch(color='#4caf50',label='Low Risk')]
+        ax.legend(handles=patches, loc='lower right', facecolor='#1a1f2e', edgecolor='#2e3450', labelcolor='#c9d1e0')
         plt.tight_layout(); st.pyplot(fig); plt.close()
 
     with col_right:
+        st.markdown("<div class='section-title'>🚦 Region Risk Signals</div>", unsafe_allow_html=True)
+        st.caption(f"Dynamic signals based on threshold: {risk_threshold}")
+        for _, row in vendor_risk.sort_values('Risk_Score', ascending=False).head(10).iterrows():
+            score = row['Risk_Score']; prob = row['Predicted_Prob']*100; gap = row['Shipping_Delay_Gap']
+            if score > risk_threshold:
+                cls,tag = "signal-watch", "<span class='signal-tag-watch'>⛔ HIGH RISK</span>"
+                desc = f"Predicted delay {prob:.1f}% · Gap {gap:.2f}d · Intervention required"
+            elif score >= risk_threshold-3:
+                cls,tag = "signal-hold", "<span class='signal-tag-hold'>⚠️ MONITOR</span>"
+                desc = f"Predicted delay {prob:.1f}% · Gap {gap:.2f}d · Enhanced monitoring"
+            else:
+                cls,tag = "signal-buy", "<span class='signal-tag-buy'>✅ STABLE</span>"
+                desc = f"Predicted delay {prob:.1f}% · Gap {gap:.2f}d · Within normal parameters"
+            st.markdown(f"<div class='{cls}'>{tag} &nbsp; <span class='signal-region'>{row['Order Region']}</span><div class='signal-desc'>{desc}</div></div>", unsafe_allow_html=True)
+
+    if 'AI_Summary' in vendor_risk.columns:
         st.markdown("<div class='section-title'>🤖 AI-Generated Risk Narratives</div>", unsafe_allow_html=True)
-        filter_cat = st.selectbox("Filter by Category", ["All","High Risk","Medium Risk","Low Risk"])
-        filtered = vendor_risk if filter_cat=="All" else vendor_risk[vendor_risk['Risk_Category']==filter_cat]
-        for _, row in filtered.sort_values('Risk_Score', ascending=False).iterrows():
-            cat = row['Risk_Category']
-            badge_class = 'badge-high' if 'High' in cat else 'badge-medium' if 'Medium' in cat else 'badge-low'
-            summary = row.get('AI_Summary','No AI summary available.')
-            st.markdown(f"<div style='margin-bottom:14px'><div style='display:flex;align-items:center;gap:10px;margin-bottom:6px'><span style='color:#c9d1e0;font-weight:600;font-size:0.9rem'>📍 {row['Order Region']}</span><span class='{badge_class}'>{cat}</span><span style='color:#8892a4;font-size:0.8rem;margin-left:auto'>Score: <b style='color:#7eb8f7'>{row['Risk_Score']:.1f}</b></span></div><div class='ai-box'>{summary}</div></div>", unsafe_allow_html=True)
+        cat_filter = st.selectbox("Filter by Category", ["All","High Risk","Medium Risk","Low Risk"])
+        filtered = vendor_risk if cat_filter=="All" else vendor_risk[vendor_risk['Risk_Category']==cat_filter]
+        col1,col2 = st.columns(2)
+        for i,(_, row) in enumerate(filtered.sort_values('Risk_Score', ascending=False).iterrows()):
+            badge = "<span class='badge-high'>High Risk</span>" if row['Risk_Score']>risk_threshold else "<span class='badge-medium'>Medium Risk</span>" if row['Risk_Score']>=risk_threshold-3 else "<span class='badge-low'>Low Risk</span>"
+            card = f"<div style='background:#1a1f2e;border:1px solid #2e3450;border-radius:8px;padding:14px;margin-bottom:10px'><div style='display:flex;align-items:center;gap:10px;margin-bottom:8px'><span style='color:#c9d1e0;font-weight:600'>📍 {row['Order Region']}</span>{badge}<span style='margin-left:auto;color:#7eb8f7;font-weight:700'>{row['Risk_Score']:.1f}/100</span></div><div style='background:#111827;border-left:3px solid #7eb8f7;border-radius:4px;padding:10px 12px;font-size:12px;color:#c9d1e0;line-height:1.6'>{row.get('AI_Summary','No summary available.')}</div></div>"
+            (col1 if i%2==0 else col2).markdown(card, unsafe_allow_html=True)
 
-    st.markdown("<div class='section-title'>📋 Complete Risk Scorecard</div>", unsafe_allow_html=True)
-    display_df = vendor_risk[['Order Region','Risk_Score','Risk_Category','Predicted_Prob','Actual','Shipping_Delay_Gap']].copy()
-    display_df['Predicted_Prob'] = (display_df['Predicted_Prob']*100).round(1).astype(str)+'%'
-    display_df['Actual'] = (display_df['Actual']*100).round(1).astype(str)+'%'
-    display_df['Risk_Score'] = display_df['Risk_Score'].round(1)
-    display_df['Shipping_Delay_Gap'] = display_df['Shipping_Delay_Gap'].round(2)
-    display_df.columns = ['Region','Risk Score','Category','Delay Probability','Actual Late Rate','Avg Delay Gap (days)']
-    st.dataframe(display_df.sort_values('Risk Score', ascending=False), use_container_width=True, hide_index=True)
-
-with tab2:
-    if on_time_rate is None:
-        st.info("Upload on_time_rate.csv or load demo data.")
+# ══════════════════════════════════════════════════════════════════════
+# PAGE 2 — RISK MONITOR
+# ══════════════════════════════════════════════════════════════════════
+elif page == "risk_monitor":
+    st.markdown("## ⚠️ Risk Monitor")
+    total = len(vendor_risk); high = (vendor_risk['Risk_Score'] > risk_threshold).sum(); pct = high/total*100
+    if pct > 40:
+        st.markdown(f"<div class='alert-red'>🚨 <b>Network Stress:</b> {pct:.0f}% of regions ({high}/{total}) in HIGH RISK territory.</div>", unsafe_allow_html=True)
+    elif pct > 20:
+        st.markdown(f"<div class='alert-yellow'>⚠️ <b>Elevated Risk:</b> {pct:.0f}% of regions ({high}/{total}) exceed the alert threshold.</div>", unsafe_allow_html=True)
     else:
-        col1, col2 = st.columns(2)
+        st.markdown(f"<div class='alert-green'>✅ <b>Network Stable:</b> Only {pct:.0f}% of regions ({high}/{total}) in alert zone.</div>", unsafe_allow_html=True)
+
+    col1,col2 = st.columns(2)
+    with col1:
+        st.markdown("<div class='section-title'>🔴 High Risk Regions</div>", unsafe_allow_html=True)
+        high_df = vendor_risk[vendor_risk['Risk_Score']>risk_threshold].sort_values('Risk_Score',ascending=False)
+        if len(high_df)==0: st.success("No regions above threshold!")
+        for _,row in high_df.iterrows():
+            st.markdown(f"<div class='signal-watch' style='margin-bottom:10px'><div style='display:flex;justify-content:space-between;align-items:center'><span style='color:#c9d1e0;font-weight:600'>📍 {row['Order Region']}</span><span style='color:#f44336;font-weight:700;font-size:18px'>{row['Risk_Score']:.1f}</span></div><div style='font-size:12px;color:#8892a4;margin-top:4px'>Delay Prob: {row['Predicted_Prob']*100:.1f}% · Actual Late: {row['Actual']*100:.1f}% · Gap: {row['Shipping_Delay_Gap']:.2f}d</div></div>", unsafe_allow_html=True)
+    with col2:
+        st.markdown("<div class='section-title'>🟡 Medium Risk Regions</div>", unsafe_allow_html=True)
+        med_df = vendor_risk[(vendor_risk['Risk_Score']>=risk_threshold-3)&(vendor_risk['Risk_Score']<=risk_threshold)].sort_values('Risk_Score',ascending=False)
+        if len(med_df)==0: st.info("No medium risk regions in current filter.")
+        for _,row in med_df.iterrows():
+            st.markdown(f"<div class='signal-hold' style='margin-bottom:10px'><div style='display:flex;justify-content:space-between;align-items:center'><span style='color:#c9d1e0;font-weight:600'>📍 {row['Order Region']}</span><span style='color:#ffc107;font-weight:700;font-size:18px'>{row['Risk_Score']:.1f}</span></div><div style='font-size:12px;color:#8892a4;margin-top:4px'>Delay Prob: {row['Predicted_Prob']*100:.1f}% · Actual Late: {row['Actual']*100:.1f}% · Gap: {row['Shipping_Delay_Gap']:.2f}d</div></div>", unsafe_allow_html=True)
+
+    st.markdown("<div class='section-title'>📊 Risk Distribution — All Regions</div>", unsafe_allow_html=True)
+    fig, ax = dark_fig(figsize=(12,4))
+    sorted_all = vendor_risk.sort_values('Risk_Score',ascending=False)
+    clrs = ['#f44336' if s>risk_threshold else '#ffc107' if s>=risk_threshold-3 else '#4caf50' for s in sorted_all['Risk_Score']]
+    ax.bar(range(len(sorted_all)), sorted_all['Risk_Score'], color=clrs, width=0.7)
+    ax.axhline(y=risk_threshold, color='#ff6b6b', linestyle='--', linewidth=2, label=f'Threshold: {risk_threshold}')
+    ax.set_xticks(range(len(sorted_all))); ax.set_xticklabels(sorted_all['Order Region'], rotation=45, ha='right', fontsize=9, color='#8892a4')
+    ax.set_title('Risk Scores vs Alert Threshold'); ax.set_ylabel('Risk Score', color='#8892a4')
+    ax.legend(facecolor='#1a1f2e', edgecolor='#2e3450', labelcolor='#c9d1e0')
+    plt.tight_layout(); st.pyplot(fig); plt.close()
+
+# ══════════════════════════════════════════════════════════════════════
+# PAGE 3 — SHIPPING ANALYSIS
+# ══════════════════════════════════════════════════════════════════════
+elif page == "shipping":
+    st.markdown("## 🚚 Shipping Mode Analysis")
+    if on_time_rate is None:
+        st.warning("Upload on_time_rate.csv to see this page.")
+    else:
+        ot = on_time_rate[on_time_rate['Shipping Mode'] != 'Unknown'].copy()
+        best = ot.loc[ot['On_Time_Percentage'].idxmax()]; worst = ot.loc[ot['On_Time_Percentage'].idxmin()]
+        k1,k2,k3,k4 = st.columns(4)
+        with k1: st.markdown(f"<div class='kpi-card'><div class='kpi-label'>Best Mode</div><div class='kpi-value' style='color:#4caf50;font-size:18px'>{best['Shipping Mode']}</div><div class='kpi-sub'>{best['On_Time_Percentage']:.1f}% on-time</div></div>", unsafe_allow_html=True)
+        with k2: st.markdown(f"<div class='kpi-card'><div class='kpi-label'>Worst Mode</div><div class='kpi-value' style='color:#f44336;font-size:18px'>{worst['Shipping Mode']}</div><div class='kpi-sub'>{worst['On_Time_Percentage']:.1f}% on-time</div></div>", unsafe_allow_html=True)
+        with k3: st.markdown(f"<div class='kpi-card'><div class='kpi-label'>Network Avg</div><div class='kpi-value'>{ot['On_Time_Percentage'].mean():.1f}%</div><div class='kpi-sub'>On-time rate</div></div>", unsafe_allow_html=True)
+        with k4: st.markdown(f"<div class='kpi-card'><div class='kpi-label'>Performance Gap</div><div class='kpi-value' style='color:#ffc107'>{best['On_Time_Percentage']-worst['On_Time_Percentage']:.1f}%</div><div class='kpi-sub'>Best vs worst mode</div></div>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        selected_modes = st.multiselect("Select Modes", ot['Shipping Mode'].tolist(), default=ot['Shipping Mode'].tolist())
+        fot = ot[ot['Shipping Mode'].isin(selected_modes)]
+        col1,col2 = st.columns(2)
         with col1:
-            st.markdown("<div class='section-title'>✅ On-Time Rate by Shipping Mode</div>", unsafe_allow_html=True)
-            fig, ax = dark_fig(figsize=(7,4.5))
-            palette = ['#0d7d87','#99c6cc','#c31e23','#ff5a5e']
-            bars = ax.bar(on_time_rate['Shipping Mode'], on_time_rate['On_Time_Percentage'], color=palette[:len(on_time_rate)], width=0.55)
-            for bar, v in zip(bars, on_time_rate['On_Time_Percentage']):
-                ax.text(bar.get_x()+bar.get_width()/2, bar.get_height()+0.8, f'{v:.1f}%', ha='center', color='#c9d1e0', fontsize=10, fontweight='bold')
+            st.markdown("<div class='section-title'>✅ On-Time Rate by Mode</div>", unsafe_allow_html=True)
+            fig, ax = dark_fig(figsize=(7,4))
+            clrs2 = ['#4caf50' if v>=60 else '#ffc107' if v>=40 else '#f44336' for v in fot['On_Time_Percentage']]
+            bars2 = ax.bar(fot['Shipping Mode'], fot['On_Time_Percentage'], color=clrs2, width=0.55)
+            for bar, v in zip(bars2, fot['On_Time_Percentage']):
+                ax.text(bar.get_x()+bar.get_width()/2, bar.get_height()+0.8, f'{v:.1f}%', ha='center', color='#c9d1e0', fontsize=11, fontweight='bold')
             ax.set_ylabel('On-Time Rate (%)'); ax.set_title('On-Time Rate by Shipping Mode'); ax.set_ylim(0,100)
             plt.tight_layout(); st.pyplot(fig); plt.close()
         with col2:
-            st.markdown("<div class='section-title'>📊 Performance Summary</div>", unsafe_allow_html=True)
-            best  = on_time_rate.loc[on_time_rate['On_Time_Percentage'].idxmax()]
-            worst = on_time_rate.loc[on_time_rate['On_Time_Percentage'].idxmin()]
-            st.metric("🥇 Best Mode",  str(best['Shipping Mode']),  f"{best['On_Time_Percentage']:.1f}% on-time")
-            st.metric("⚠️ Worst Mode", str(worst['Shipping Mode']), f"{worst['On_Time_Percentage']:.1f}% on-time")
-            st.dataframe(on_time_rate.sort_values('On_Time_Percentage', ascending=False), use_container_width=True, hide_index=True)
+            st.markdown("<div class='section-title'>📋 Mode Signals</div>", unsafe_allow_html=True)
+            st.markdown("<br>", unsafe_allow_html=True)
+            for _, row in fot.sort_values('On_Time_Percentage', ascending=False).iterrows():
+                pct = row['On_Time_Percentage']
+                color = "#4caf50" if pct>=60 else "#ffc107" if pct>=40 else "#f44336"
+                signal = "✅ STABLE" if pct>=60 else "⚠️ MONITOR" if pct>=40 else "🚨 HIGH RISK"
+                st.markdown(f"<div style='background:#1a1f2e;border:1px solid #2e3450;border-radius:8px;padding:14px;margin-bottom:8px'><div style='display:flex;justify-content:space-between;align-items:center'><span style='color:#c9d1e0;font-weight:600'>{row['Shipping Mode']}</span><span style='color:{color};font-weight:700;font-size:20px'>{pct:.1f}%</span></div><div style='font-size:12px;color:#8892a4;margin-top:4px'>{signal} · {100-pct:.1f}% delay rate</div></div>", unsafe_allow_html=True)
 
-with tab3:
+# ══════════════════════════════════════════════════════════════════════
+# PAGE 4 — SEASONALITY
+# ══════════════════════════════════════════════════════════════════════
+elif page == "seasonality":
+    st.markdown("## 📅 Seasonality Analysis")
     if monthly_data is None:
-        st.info("Upload monthly_data.csv or load demo data.")
+        st.warning("Upload monthly_data.csv to see this page.")
     else:
-        st.markdown("<div class='section-title'>📅 On-Time Rate vs Order Volume (Seasonality)</div>", unsafe_allow_html=True)
+        md = monthly_data.copy()
+        if 'Month_Name' in md.columns:
+            md = md[md['Month_Name'] != 'Unknown']
+            sel_months = st.multiselect("Select Months", md['Month_Name'].tolist(), default=md['Month_Name'].tolist())
+            if sel_months: md = md[md['Month_Name'].isin(sel_months)]
+        if 'On_Time_Percentage' in md.columns and 'Month_Name' in md.columns:
+            best_m = md.loc[md['On_Time_Percentage'].idxmax(),'Month_Name']
+            worst_m = md.loc[md['On_Time_Percentage'].idxmin(),'Month_Name']
+            k1,k2,k3 = st.columns(3)
+            with k1: st.markdown(f"<div class='kpi-card'><div class='kpi-label'>Best Month</div><div class='kpi-value' style='color:#4caf50;font-size:22px'>{best_m}</div><div class='kpi-sub'>{md['On_Time_Percentage'].max():.1f}% on-time</div></div>", unsafe_allow_html=True)
+            with k2: st.markdown(f"<div class='kpi-card'><div class='kpi-label'>Worst Month</div><div class='kpi-value' style='color:#f44336;font-size:22px'>{worst_m}</div><div class='kpi-sub'>{md['On_Time_Percentage'].min():.1f}% on-time</div></div>", unsafe_allow_html=True)
+            with k3: st.markdown(f"<div class='kpi-card'><div class='kpi-label'>Avg On-Time</div><div class='kpi-value'>{md['On_Time_Percentage'].mean():.1f}%</div><div class='kpi-sub'>Selected months</div></div>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("<div class='section-title'>📈 On-Time Rate vs Order Volume</div>", unsafe_allow_html=True)
         fig, ax1 = plt.subplots(figsize=(12,5))
-        fig.patch.set_facecolor('#1e2130'); ax1.set_facecolor('#1e2130')
-        ax1.plot(monthly_data['Month_Name'], monthly_data['On_Time_Percentage'], color='#ffa94d', marker='o', linewidth=2.5, markersize=7, label='On-Time Rate (%)')
-        ax1.fill_between(monthly_data['Month_Name'], monthly_data['On_Time_Percentage'], alpha=0.15, color='#ffa94d')
-        ax1.set_ylabel('On-Time Rate (%)', color='#ffa94d'); ax1.tick_params(axis='y', labelcolor='#ffa94d'); ax1.tick_params(axis='x', colors='#8892a4'); ax1.set_ylim(0,100)
-        for spine in ax1.spines.values(): spine.set_edgecolor('#2e3450')
+        fig.patch.set_facecolor('#1a1f2e'); ax1.set_facecolor('#1a1f2e')
+        ax1.plot(md['Month_Name'], md['On_Time_Percentage'], color='#ffc107', marker='o', linewidth=2.5, markersize=8, label='On-Time Rate (%)')
+        ax1.fill_between(md['Month_Name'], md['On_Time_Percentage'], alpha=0.15, color='#ffc107')
+        ax1.axhline(y=md['On_Time_Percentage'].mean(), color='#7eb8f7', linestyle='--', linewidth=1, label=f"Avg: {md['On_Time_Percentage'].mean():.1f}%")
+        ax1.set_ylabel('On-Time Rate (%)', color='#ffc107'); ax1.tick_params(axis='y', labelcolor='#ffc107')
+        ax1.tick_params(axis='x', colors='#8892a4'); ax1.set_ylim(0,100)
+        for sp in ax1.spines.values(): sp.set_edgecolor('#2e3450')
         ax2 = ax1.twinx()
-        ax2.bar(monthly_data['Month_Name'], monthly_data['Order Item Quantity'], alpha=0.35, color='#7eb8f7', label='Order Quantity')
-        ax2.set_ylabel('Total Order Quantity', color='#7eb8f7'); ax2.tick_params(axis='y', labelcolor='#7eb8f7')
-        for spine in ax2.spines.values(): spine.set_edgecolor('#2e3450')
+        ax2.bar(md['Month_Name'], md['Order Item Quantity'], alpha=0.3, color='#7eb8f7', label='Order Volume')
+        ax2.set_ylabel('Order Volume', color='#7eb8f7'); ax2.tick_params(axis='y', labelcolor='#7eb8f7')
+        for sp in ax2.spines.values(): sp.set_edgecolor('#2e3450')
         ax1.set_title('Seasonality: On-Time Rate vs Order Volume', color='#c9d1e0', fontsize=13)
-        ax1.grid(axis='y', color='#2e3450', linestyle='--', alpha=0.5)
-        lines1, labels1 = ax1.get_legend_handles_labels()
-        lines2, labels2 = ax2.get_legend_handles_labels()
-        ax1.legend(lines1+lines2, labels1+labels2, facecolor='#1e2130', edgecolor='#2e3450', labelcolor='#c9d1e0', loc='upper left')
+        ax1.grid(axis='y', color='#2e3450', linestyle='--', alpha=0.4)
+        lines1,labels1 = ax1.get_legend_handles_labels(); lines2,labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines1+lines2, labels1+labels2, facecolor='#1a1f2e', edgecolor='#2e3450', labelcolor='#c9d1e0', loc='upper left')
         plt.tight_layout(); st.pyplot(fig); plt.close()
-        month_display = monthly_data[['Month_Name','On_Time_Percentage','Order Item Quantity']].copy()
-        month_display.columns = ['Month','On-Time Rate (%)','Total Quantity']
-        st.dataframe(month_display, use_container_width=True, hide_index=True)
+        st.dataframe(md[['Month_Name','On_Time_Percentage','Order Item Quantity']].rename(columns={'Month_Name':'Month','On_Time_Percentage':'On-Time Rate (%)','Order Item Quantity':'Order Volume'}), use_container_width=True, hide_index=True)
 
-with tab4:
-    st.markdown("<div class='section-title'>🤖 Model Comparison</div>", unsafe_allow_html=True)
-    model_results = pd.DataFrame({
-        'Model':     ['Logistic Regression','Random Forest','Decision Tree','XGBoost'],
-        'Accuracy':  [0.9903, 0.9874, 0.9776, 0.9901],
-        'Precision': [0.9836, 0.9839, 0.9843, 0.9836],
-        'Recall':    [1.0000, 0.9946, 0.9769, 0.9997],
-        'F1 Score':  [0.9917, 0.9892, 0.9806, 0.9916],
-        'ROC-AUC':   [0.9904, 0.9917, 0.9786, 0.9938],
+# ══════════════════════════════════════════════════════════════════════
+# PAGE 5 — MODEL INSIGHTS
+# ══════════════════════════════════════════════════════════════════════
+elif page == "model":
+    st.markdown("## 🤖 Model Insights")
+    st.markdown("<p style='color:#8892a4'>XGBoost selected as primary model · 180,519 supply chain records</p>", unsafe_allow_html=True)
+    model_df = pd.DataFrame({
+        'Model':      ['Logistic Regression','Random Forest','Decision Tree','XGBoost ★'],
+        'Accuracy':   [0.9753,0.9683,0.9479,0.9752],
+        'Precision':  [0.9569,0.9572,0.9570,0.9569],
+        'Recall':     [1.0000,0.9863,0.9478,0.9999],
+        'F1 Score':   [0.9780,0.9715,0.9524,0.9779],
+        'ROC-AUC':    [0.9727,0.9732,0.9519,0.9754],
+        'Overfitting':['Minimal','Moderate','High','Minimal']
     })
-    col1, col2 = st.columns([1.5, 1])
+    selected_metric = st.selectbox("Metric to Visualise", ['Accuracy','Precision','Recall','F1 Score','ROC-AUC'])
+    col1,col2 = st.columns([1.5,1])
     with col1:
-        metrics_order = ['Accuracy','Precision','Recall','F1 Score','ROC-AUC']
-        colors_models = ['#7eb8f7','#51cf66','#ffa94d','#ff6b6b']
-        x = np.arange(len(metrics_order)); width = 0.18
-        fig, ax = dark_fig(figsize=(10,5))
-        for i, (model, color) in enumerate(zip(model_results['Model'], colors_models)):
-            scores = [model_results.loc[model_results['Model']==model, m].values[0] for m in metrics_order]
-            ax.bar(x + (i-1.5)*width, scores, width, label=model, color=color, alpha=0.85)
-        ax.set_xticks(x); ax.set_xticklabels(metrics_order, fontsize=10); ax.set_ylim(0.95,1.01)
-        ax.set_ylabel('Score'); ax.set_title('Model Performance Comparison')
-        ax.legend(facecolor='#1e2130', edgecolor='#2e3450', labelcolor='#c9d1e0', fontsize=9)
-        ax.grid(axis='y', color='#2e3450', linestyle='--', alpha=0.5)
+        st.markdown(f"<div class='section-title'>📊 {selected_metric} — All Models</div>", unsafe_allow_html=True)
+        fig, ax = dark_fig(figsize=(9,4))
+        vals = model_df[selected_metric].values
+        clrs3 = ['#4caf50' if 'XGBoost' in m else '#7eb8f7' for m in model_df['Model']]
+        bars3 = ax.bar(model_df['Model'], vals, color=clrs3, width=0.55)
+        for bar, v in zip(bars3, vals):
+            ax.text(bar.get_x()+bar.get_width()/2, bar.get_height()+0.001, f'{v:.4f}', ha='center', color='#c9d1e0', fontsize=10)
+        ax.set_ylim(min(vals)-0.02,1.01); ax.set_ylabel(selected_metric, color='#8892a4'); ax.set_title(f'{selected_metric} — All Models')
         plt.tight_layout(); st.pyplot(fig); plt.close()
     with col2:
-        st.markdown("<div class='section-title'>Scores Table</div>", unsafe_allow_html=True)
-        display_model = model_results.copy()
-        for c in ['Accuracy','Precision','Recall','F1 Score','ROC-AUC']:
-            display_model[c] = display_model[c].apply(lambda x: f"{x:.4f}")
-        st.dataframe(display_model, use_container_width=True, hide_index=True)
-        st.markdown("<div class='section-title'>Before vs After Tuning</div>", unsafe_allow_html=True)
-        tuning_df = pd.DataFrame({'Metric':['Accuracy','Precision','Recall','F1'],'Before':[0.78,0.81,0.78,0.79],'After':[0.92,0.94,0.92,0.93]})
-        tuning_df['Improvement'] = ((tuning_df['After']-tuning_df['Before'])/tuning_df['Before']*100).round(1).astype(str)+'%'
-        st.dataframe(tuning_df, use_container_width=True, hide_index=True)
-    st.markdown("<div class='section-title'>💼 Business Impact</div>", unsafe_allow_html=True)
-    b1,b2,b3 = st.columns(3)
-    with b1: st.markdown("<div class='metric-card'><div class='value' style='color:#ff6b6b'>55%</div><div class='label'>Late Deliveries Without Model</div></div>", unsafe_allow_html=True)
-    with b2: st.markdown("<div class='metric-card'><div class='value' style='color:#51cf66'>99%</div><div class='label'>XGBoost Prediction Accuracy</div></div>", unsafe_allow_html=True)
-    with b3: st.markdown("<div class='metric-card'><div class='value' style='color:#7eb8f7'>18.4%</div><div class='label'>Avg Improvement After Tuning</div></div>", unsafe_allow_html=True)
+        st.markdown("<div class='section-title'>📋 Full Scorecard</div>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        for _,row in model_df.iterrows():
+            is_best = "★" in row['Model']
+            bg = "#0a1f0f" if is_best else "#1a1f2e"
+            border = "#1a4a22" if is_best else "#2e3450"
+            st.markdown(f"<div style='background:{bg};border:1px solid {border};border-radius:8px;padding:12px 14px;margin-bottom:8px'><div style='font-weight:600;color:#c9d1e0;margin-bottom:6px'>{row['Model']}</div><div style='display:flex;gap:16px;font-size:12px;color:#8892a4'><span>Acc: <b style='color:#7eb8f7'>{row['Accuracy']:.4f}</b></span><span>Recall: <b style='color:#7eb8f7'>{row['Recall']:.4f}</b></span><span>AUC: <b style='color:#7eb8f7'>{row['ROC-AUC']:.4f}</b></span><span>Overfit: <b style='color:#ffc107'>{row['Overfitting']}</b></span></div></div>", unsafe_allow_html=True)
 
-with tab5:
-    st.markdown("<div class='section-title'>📋 Full Vendor Risk Dataset</div>", unsafe_allow_html=True)
-    st.dataframe(vendor_risk, use_container_width=True, hide_index=True)
+    st.markdown("<div class='section-title'>🔲 XGBoost Confusion Matrix</div>", unsafe_allow_html=True)
+    col1,col2,col3 = st.columns([1,1.5,1])
+    with col2:
+        fig, ax = dark_fig(figsize=(6,5))
+        cm = np.array([[23071,1340],[2,29743]])
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['On-time','Late'], yticklabels=['On-time','Late'], ax=ax)
+        ax.set_xlabel("Predicted", color='#8892a4'); ax.set_ylabel("Actual", color='#8892a4'); ax.set_title("Confusion Matrix — XGBoost", color='#c9d1e0')
+        ax.tick_params(colors='#8892a4')
+        plt.tight_layout(); st.pyplot(fig); plt.close()
+
+    st.markdown("<div class='section-title'>💼 Business Impact</div>", unsafe_allow_html=True)
+    b1,b2,b3,b4 = st.columns(4)
+    with b1: st.markdown("<div class='kpi-card'><div class='kpi-label'>Without Model</div><div class='kpi-value' style='color:#f44336'>54.8%</div><div class='kpi-sub'>Deliveries late</div></div>", unsafe_allow_html=True)
+    with b2: st.markdown("<div class='kpi-card'><div class='kpi-label'>XGBoost Accuracy</div><div class='kpi-value' style='color:#4caf50'>97.5%</div><div class='kpi-sub'>On test set</div></div>", unsafe_allow_html=True)
+    with b3: st.markdown("<div class='kpi-card'><div class='kpi-label'>False Negatives</div><div class='kpi-value' style='color:#4caf50'>2</div><div class='kpi-sub'>In 54,156 records</div></div>", unsafe_allow_html=True)
+    with b4: st.markdown("<div class='kpi-card'><div class='kpi-label'>Avg Improvement</div><div class='kpi-value'>17.4%</div><div class='kpi-sub'>After tuning</div></div>", unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════
+# PAGE 6 — DATA EXPLORER
+# ══════════════════════════════════════════════════════════════════════
+elif page == "data":
+    st.markdown("## 📋 Data Explorer")
+    col1,col2 = st.columns(2)
+    with col1: sort_col = st.selectbox("Sort By", ['Risk_Score','Predicted_Prob','Actual','Shipping_Delay_Gap'])
+    with col2: sort_dir = st.radio("Order", ["Descending","Ascending"], horizontal=True)
+    sorted_vr = vendor_risk.sort_values(sort_col, ascending=(sort_dir=="Ascending"))
+    k1,k2,k3,k4 = st.columns(4)
+    with k1: st.metric("Max Risk Score", f"{vendor_risk['Risk_Score'].max():.1f}")
+    with k2: st.metric("Min Risk Score", f"{vendor_risk['Risk_Score'].min():.1f}")
+    with k3: st.metric("Avg Delay Prob", f"{vendor_risk['Predicted_Prob'].mean()*100:.1f}%")
+    with k4: st.metric("Avg Actual Late", f"{vendor_risk['Actual'].mean()*100:.1f}%")
+    st.markdown("<br>", unsafe_allow_html=True)
+    cols_show = [c for c in ['Order Region','Risk_Score','Risk_Category','Predicted_Prob','Actual','Shipping_Delay_Gap','AI_Summary'] if c in sorted_vr.columns]
+    st.dataframe(sorted_vr[cols_show], use_container_width=True, hide_index=True)
     csv = vendor_risk.to_csv(index=False).encode('utf-8')
-    st.download_button(label="⬇️ Download vendor_risk_report.csv", data=csv, file_name='vendor_risk_report.csv', mime='text/csv', use_container_width=True)
+    st.download_button("⬇️ Download Filtered Data", data=csv, file_name='vendor_risk_filtered.csv', mime='text/csv', use_container_width=True)
